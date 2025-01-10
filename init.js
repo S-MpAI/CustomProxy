@@ -102,9 +102,7 @@ puppeteer.use(StealthPlugin());
                 } else {return res.status(500).json({ type: "None", error: error.message });}
             } finally {
                 try {await page.close();} 
-                catch (closeError) {
-                    // console.error('Ошибка при закрытии страницы:', closeError.message);
-                }
+                catch (closeError) {}
             }
         } catch (error) {
             if (error.name === 'TimeoutError') {return res.status(500).json({ type: "TimeoutError", error: error.message });
@@ -223,9 +221,7 @@ puppeteer.use(StealthPlugin());
             } else {return res.status(500).json({ type: "None", error: error.message });}
         } finally {
             try {await page.close();} 
-            catch (closeError) {
-                // console.error('Ошибка при закрытии страницы:', closeError.message);
-            }
+            catch (closeError) {}
         }
     });
     
@@ -248,9 +244,7 @@ puppeteer.use(StealthPlugin());
             } else {return res.status(500).json({ type: "None", error: error.message });}
         } finally {
             try {await page.close();} 
-            catch (closeError) {
-                // console.error('Ошибка при закрытии страницы:', closeError.message);
-            }
+            catch (closeError) {}
         }
         
     });
@@ -275,9 +269,7 @@ puppeteer.use(StealthPlugin());
             } else {return res.status(500).json({ type: "None", error: error.message });}
         } finally {
             try {await page.close();} 
-            catch (closeError) {
-                // console.error('Ошибка при закрытии страницы:', closeError.message);
-            }
+            catch (closeError) {}
         }
     });
 
@@ -299,9 +291,7 @@ puppeteer.use(StealthPlugin());
             } else {return res.status(500).json({ type: "None", error: error.message });}
         } finally {
             try {await page.close();} 
-            catch (closeError) {
-                // console.error('Ошибка при закрытии страницы:', closeError.message);
-            }
+            catch (closeError) {}
         }
     });
 
