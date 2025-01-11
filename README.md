@@ -287,7 +287,7 @@ puppeteer.use(StealthPlugin());
     });
 
     app.get('/api/pdf', async (req, res) => {
-        const { url, html } = req.body;
+        const { url, size, ...params } = req.query;
         const page = await app.locals.browser.newPage();
         
         try {
