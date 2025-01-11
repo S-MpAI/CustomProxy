@@ -48,96 +48,87 @@ puppeteer.use(StealthPlugin());
 
 
     app.get('/api/screenshot', async (req, res) => {
-        const { url, size, ...params } = req.query;
-        
+        const { url, width, height, ...params } = req.query;
+
         // Validate URL
         if (!url) return res.status(400).send('Url parameter is required');
-        if (!isValidUrl(url)) return res.status(403).send(`Url parameter is forbidden.`);
-        
-        const queryParams = new URLSearchParams(params).toString();
-        const fullUrl = queryParams ? `${url}&${queryParams}` : url;
-    
-        // Default image dimensions
-        let imageWidth = 1920;
-        let imageHeight = 1080;
-    
+
+        let parsedUrl;
         try {
-            // Fetch headers to get content type and dimensions (if possible)
+            parsedUrl = new URL(url);
+            if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+                return res.status(400).send('Invalid URL protocol. Only HTTP and HTTPS are allowed.');
+            }
+        } catch (err) {
+            return res.status(400).send('Malformed URL.');
+        }
+
+        const queryParams = new URLSearchParams(params).toString();
+        const fullUrl = queryParams ? `${url}?${queryParams}` : url;
+
+        // Default image dimensions
+        let imageWidth = parseInt(width, 10) || 1920;
+        let imageHeight = parseInt(height, 10) || 1080;
+
+        try {
+            // Fetch headers to get additional details if available
             try {
-                try {
-                    const url = new URL(fullUrl);
-                    if (url.protocol !== 'https:' && url.protocol !== 'http:') {
-                        throw new Error('Invalid URL protocol');
-                    }
-                } catch (err) {
-                    res.status(400).send("Invalid URL protocol");
-                    // Handle the error appropriately
-                }
-                const response = await axios.head(fullUrl);
+                const response = await axios.head(fullUrl, { timeout: 5000 });
                 const contentType = response.headers['content-type'];
-    
-                // If not an image, attempt to fetch dimensions
-                if (!contentType.startsWith('image/')) {
+
+                if (contentType && !contentType.startsWith('image/')) {
                     imageWidth = parseInt(response.headers['width'], 10) || imageWidth;
                     imageHeight = parseInt(response.headers['height'], 10) || imageHeight;
                 }
             } catch (err) {
-                // Ignore error from axios.head()
-            }
-    
-            // Override dimensions if passed in the query
-            if (req.query.height) imageHeight = parseInt(req.query.height, 10) || imageHeight;
-            if (req.query.width) imageWidth = parseInt(req.query.width, 10) || imageWidth;
-    
-            // Validate dimensions format
-            const urlParam = req.query.url;
-            const allowedProtocols = ['https:', 'http:'];
-
-            try {
-                const url = new URL(fullUrl);
-                if (!allowedProtocols.includes(url.protocol)) {
-                    throw new Error('Invalid URL protocol');
-                }
-                const response = await axios.head(url.toString());
-            } catch (err) {
-                res.status(400).send("Invalid URL protocol or malformed URL");
+                console.warn('Failed to fetch headers:', err.message);
             }
 
-
-            
-            if (dimensions) {
-                imageWidth = parseInt(dimensions[1], 10) || imageWidth;
-                imageHeight = parseInt(dimensions[2], 10) || imageHeight;
+            // Validate dimensions
+            if (isNaN(imageWidth) || isNaN(imageHeight) || imageWidth <= 0 || imageHeight <= 0) {
+                return res.status(400).send('Invalid image dimensions.');
             }
-    
-            // Validate final dimensions
-            if (isNaN(imageWidth) || isNaN(imageHeight)) throw new Error('Invalid image dimensions');
-    
-            // Initialize browser page for screenshot
-            const page = await app.locals.browser.newPage();
+
+            // Initialize Puppeteer for screenshot
+            const browser = app.locals.browser;
+            const page = await browser.newPage();
             await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36');
             await page.setExtraHTTPHeaders({ 'Accept-Language': 'en-US,en;q=0.9' });
             await page.setViewport({ width: imageWidth, height: imageHeight });
-            await page.goto(fullUrl, { waitUntil: 'load', timeout: 60000 });
-    
-            // Set cookies
+
+            try {
+                await page.goto(fullUrl, { waitUntil: 'load', timeout: 60000 });
+            } catch (err) {
+                await page.close();
+                return res.status(500).send(`Failed to load the URL: ${err.message}`);
+            }
+
+            // Set cookies if necessary
             const cookies = [
-                { name: 'example_cookie', value: 'cookie_value', domain: new URL(url).hostname },
-                { name: 'preferred_color_mode', value: 'dark', domain: new URL(url).hostname }
+                { name: 'example_cookie', value: 'cookie_value', domain: parsedUrl.hostname },
+                { name: 'preferred_color_mode', value: 'dark', domain: parsedUrl.hostname }
             ];
             await page.setCookie(...cookies);
-    
+
             // Save screenshot
-            const safeFileName = fullUrl.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 100);
+            const safeFileName = parsedUrl.hostname.replace(/[^a-zA-Z0-9]/g, '_');
             const screenshotPath = path.join(os.tmpdir(), `${safeFileName}.png`);
-            await page.screenshot({ path: screenshotPath, fullPage: true });
-    
+
+            try {
+                await page.screenshot({ path: screenshotPath, fullPage: true });
+            } catch (err) {
+                await page.close();
+                return res.status(500).send(`Failed to take a screenshot: ${err.message}`);
+            }
+
+            await page.close();
+
             // Send the screenshot
             res.sendFile(screenshotPath, async (err) => {
                 if (err) {
-                    return res.status(500).send('Error sending screenshot');
+                    return res.status(500).send('Error sending the screenshot');
                 }
-    
+
                 // Clean up after sending
                 try {
                     await fs.promises.unlink(screenshotPath);
@@ -145,20 +136,10 @@ puppeteer.use(StealthPlugin());
                     console.error('Error removing file:', unlinkError);
                 }
             });
-    
+
         } catch (error) {
-            // Handle different types of errors
-            const errorType = error.name || 'None';
-            const errorMessage = error.message || 'Unknown error';
-    
-            // Handle timeout and connection errors
-            if (error.name === 'TimeoutError') return res.status(500).json({ type: errorType, error: errorMessage });
-            if (errorMessage.includes('net::ERR_ABORTED')) return res.status(500).json({ type: 'ERR_ABORTED', error: errorMessage });
-            if (errorMessage.includes('ERR_CONNECTION_REFUSED')) return res.status(500).json({ type: 'ERR_CONNECTION_REFUSED', error: errorMessage });
-            if (errorMessage.includes('ERR_TOO_MANY_REDIRECTS')) return res.status(500).json({ type: 'ERR_TOO_MANY_REDIRECTS', error: errorMessage });
-    
-            // Default error response
-            return res.status(500).json({ type: errorType, error: errorMessage });
+            console.error('Error:', error);
+            return res.status(500).json({ type: error.name || 'UnknownError', error: error.message || 'An unknown error occurred.' });
         }
     });
     
