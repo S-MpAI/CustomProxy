@@ -81,7 +81,7 @@ puppeteer.use(StealthPlugin());
             if (req.query.width) imageWidth = parseInt(req.query.width, 10) || imageWidth;
     
             // Validate dimensions format
-            const dimensions = req.query.url?.match(/(\d+)x(\d+)/);
+            const dimensions = req.query.url?.match(/(\d+)x(\d+)/) || null;
             if (dimensions) {
                 imageWidth = parseInt(dimensions[1], 10) || imageWidth;
                 imageHeight = parseInt(dimensions[2], 10) || imageHeight;
