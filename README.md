@@ -50,78 +50,107 @@ puppeteer.use(StealthPlugin());
 
 
     app.get('/api/screenshot', async (req, res) => {
-        const { url, size, ...params } = req.query;
-        if (!url) {return res.status(400).send('Url parameter is required');}
-        else {if (!isValidUrl(url)) {return res.status(403).send(`Url parameter is forbidden (${url})`);} }
-        const queryParams = new URLSearchParams(params).toString();
-        const fullUrl = queryParams ? `${url}&${queryParams}` : url;
-        let imageWidth = 1920;
-        let imageHeight = 1080; 
+        const { url, width, height, ...params } = req.query;
+
+        // Validate URL
+        if (!url) return res.status(400).send('Url parameter is required');
+
+        let parsedUrl;
         try {
+            parsedUrl = new URL(url);
+            if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+                return res.status(400).send('Invalid URL protocol. Only HTTP and HTTPS are allowed.');
+            }
+        } catch (err) {
+            return res.status(400).send('Malformed URL.');
+        }
+
+        const queryParams = new URLSearchParams(params).toString();
+        const fullUrl = queryParams ? `${url}?${queryParams}` : url;
+
+        // Default image dimensions
+        let imageWidth = parseInt(width, 10) || 1920;
+        let imageHeight = parseInt(height, 10) || 1080;
+
+        try {
+            // Fetch headers to get additional details if available
             try {
-                const response = await axios.head(fullUrl);
+                const response = await axios.head(fullUrl, { timeout: 5000 });
                 const contentType = response.headers['content-type'];
-                if (!contentType.startsWith('image/')) {
+
+                if (contentType && !contentType.startsWith('image/')) {
                     imageWidth = parseInt(response.headers['width'], 10) || imageWidth;
                     imageHeight = parseInt(response.headers['height'], 10) || imageHeight;
                 }
-            } catch {}
+            } catch (err) {
+                console.warn('Failed to fetch headers:', err.message);
+            }
 
-            if (req.query.height !== undefined) {imageHeight = parseInt(req.query.height, 10) || imageHeight;}
-            if (req.query.width !== undefined) {imageWidth = parseInt(req.query.width, 10) || imageWidth;}
-            const dimensions = req.query.url.match(/(\d+)x(\d+)/);  
-            if (dimensions && dimensions.length === 3) {
-                imageWidth = parseInt(dimensions[1], 10) || imageWidth;
-                imageHeight = parseInt(dimensions[2], 10) || imageHeight;
+            // Validate dimensions
+            if (isNaN(imageWidth) || isNaN(imageHeight) || imageWidth <= 0 || imageHeight <= 0) {
+                return res.status(400).send('Invalid image dimensions.');
             }
-            if (isNaN(imageWidth) || isNaN(imageHeight)) {throw new Error('Invalid image dimensions');}
-            const page = await app.locals.browser.newPage();
+
+            // Initialize Puppeteer for screenshot
+            const browser = app.locals.browser;
+            const page = await browser.newPage();
+            await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36');
+            await page.setExtraHTTPHeaders({ 'Accept-Language': 'en-US,en;q=0.9' });
+            await page.setViewport({ width: imageWidth, height: imageHeight });
+
             try {
-                await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36');
-                await page.setExtraHTTPHeaders({'Accept-Language': 'en-US,en;q=0.9',});
-                await page.setViewport({ width: imageWidth, height: imageHeight });
                 await page.goto(fullUrl, { waitUntil: 'load', timeout: 60000 });
-                const cookies = [
-                    {name: 'example_cookie', value: 'cookie_value', domain: new URL(url).hostname },
-                    {name: 'preferred_color_mode', value: 'dark', domain: new URL(url).hostname }
-                ];
-                await page.setCookie(...cookies);
-                const safeFileName = fullUrl.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 100); 
-                const screenshotPath = path.join(os.tmpdir(), `${safeFileName}.png`);
-                await page.screenshot({ path: screenshotPath, fullPage: true });
-                res.sendFile(screenshotPath, async (err) => {
-                    if (err) {res.status(500).send('Error sending screenshot');} 
-                    else {
-                        try {await fs.promises.unlink(screenshotPath);} 
-                        catch (unlinkError) {console.error('Ошибка при удалении файла:', unlinkError);}
-                    }
-                });
-            } catch (error) {
-                if (error.name === 'TimeoutError') {return res.status(500).json({ type: "TimeoutError", error: error.message });
-                } else if (error.message.includes('net::ERR_ABORTED')) {return res.status(500).json({ type: "ERR_ABORTED", error: error.message });
-                } else if (error.message.includes('ERR_CONNECTION_REFUSED')) {return res.status(500).json({ type: "ERR_CONNECTION_REFUSED", error: error.message });
-                } else if (error.message.includes('ERR_TOO_MANY_REDIRECTS')) {return res.status(500).json({ type: "ERR_TOO_MANY_REDIRECTS", error: error.message });
-                } else {return res.status(500).json({ type: "None", error: error.message });}
-            } finally {
-                try {await page.close();} 
-                catch (closeError) {
-                    // console.error('Ошибка при закрытии страницы:', closeError.message);
-                }
+            } catch (err) {
+                await page.close();
+                return res.status(500).send(`Failed to load the URL: ${err.message}`);
             }
+
+            // Set cookies if necessary
+            const cookies = [
+                { name: 'example_cookie', value: 'cookie_value', domain: parsedUrl.hostname },
+                { name: 'preferred_color_mode', value: 'dark', domain: parsedUrl.hostname }
+            ];
+            await page.setCookie(...cookies);
+
+            // Save screenshot
+            const safeFileName = parsedUrl.hostname.replace(/[^a-zA-Z0-9]/g, '_');
+            const screenshotPath = path.join(os.tmpdir(), `${safeFileName}.png`);
+
+            try {
+                await page.screenshot({ path: screenshotPath, fullPage: true });
+            } catch (err) {
+                await page.close();
+                return res.status(500).send(`Failed to take a screenshot: ${err.message}`);
+            }
+
+            await page.close();
+
+            // Send the screenshot
+            res.sendFile(screenshotPath, async (err) => {
+                if (err) {
+                    return res.status(500).send('Error sending the screenshot');
+                }
+
+                // Clean up after sending
+                try {
+                    await fs.promises.unlink(screenshotPath);
+                } catch (unlinkError) {
+                    console.error('Error removing file:', unlinkError);
+                }
+            });
+
         } catch (error) {
-            if (error.name === 'TimeoutError') {return res.status(500).json({ type: "TimeoutError", error: error.message });
-            } else if (error.message.includes('net::ERR_ABORTED')) {return res.status(500).json({ type: "ERR_ABORTED", error: error.message });
-            } else if (error.message.includes('ERR_CONNECTION_REFUSED')) {return res.status(500).json({ type: "ERR_CONNECTION_REFUSED", error: error.message });
-            } else if (error.message.includes('ERR_TOO_MANY_REDIRECTS')) {return res.status(500).json({ type: "ERR_TOO_MANY_REDIRECTS", error: error.message });
-            } else {return res.status(500).json({ type: "None", error: error.message });}
+            console.error('Error:', error);
+            return res.status(500).json({ type: error.name || 'UnknownError', error: error.message || 'An unknown error occurred.' });
         }
     });
+    
 
 
     app.get('/api/full_page', async (req, res) => {
         const { url, size, ...params } = req.query;
         if (!url) {return res.status(400).send('Url parameter is required');}
-        if (!isValidUrl(url))  {return res.status(403).send(`Url parameter is forbidden (${url})`);}
+        if (!isValidUrl(url))  {return res.status(403).send(`Url parameter is forbidden.`);}
 
         const queryParams = new URLSearchParams(params).toString();
         const fullUrl = queryParams ? `${url}&${queryParams}` : url;
@@ -151,8 +180,6 @@ puppeteer.use(StealthPlugin());
                     }),
                 });
             });
-            // page.on('console', (msg) => console.log('PAGE LOG:', msg.text()));
-            // page.on('error', (err) => console.error('PAGE ERROR:', err));
             let reqHeaders = await getContentType(rootSite, fullUrl);
             if (reqHeaders.startsWith('video/') || reqHeaders.startsWith('application/octet-stream')) {
                 console.log('Request headers:', reqHeaders);
@@ -225,9 +252,7 @@ puppeteer.use(StealthPlugin());
             } else {return res.status(500).json({ type: "None", error: error.message });}
         } finally {
             try {await page.close();} 
-            catch (closeError) {
-                // console.error('Ошибка при закрытии страницы:', closeError.message);
-            }
+            catch (closeError) {}
         }
     });
     
@@ -235,7 +260,7 @@ puppeteer.use(StealthPlugin());
     app.get('/api/proxy_handler', async (req, res) => {
         const url = req.query.url;
         if (!url) {return res.status(400).json({ error: 'Url parameter is required' });}
-        if (!isValidUrl(url)) {return res.status(403).json({ error: `Url parameter is forbidden (${url})` });}
+        if (!isValidUrl(url)) {return res.status(403).json({ error: `Url parameter is forbidden.` });}
 
         try {
             const response = await axios.get(url, { responseType: 'arraybuffer' });
@@ -250,9 +275,7 @@ puppeteer.use(StealthPlugin());
             } else {return res.status(500).json({ type: "None", error: error.message });}
         } finally {
             try {await page.close();} 
-            catch (closeError) {
-                // console.error('Ошибка при закрытии страницы:', closeError.message);
-            }
+            catch (closeError) {}
         }
         
     });
@@ -260,28 +283,42 @@ puppeteer.use(StealthPlugin());
     app.get('/api/pdf', async (req, res) => {
         const { url, html } = req.body;
         const page = await app.locals.browser.newPage();
+        
         try {
             await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36');
-            await page.setExtraHTTPHeaders({'Accept-Language': 'en-US,en;q=0.9',});
-            if (url) {await page.goto(url, { waitUntil: 'load' });} 
-            else if (html) {await page.setContent(html);} 
-            else {res.status(401).json({ error: 'Url or html parameters is required' });}
+            await page.setExtraHTTPHeaders({ 'Accept-Language': 'en-US,en;q=0.9' });
+            if (url) {
+                await page.goto(url, { waitUntil: 'load' });
+            } else if (html) {
+                await page.setContent(html);
+            } else {
+                return res.status(400).json({ error: 'Either "url" or "html" parameter is required' });
+            }
             const pdfBuffer = await page.pdf();
             res.set('Content-Type', 'application/pdf');
             res.send(pdfBuffer);
         } catch (error) {
-            if (error.name === 'TimeoutError') {return res.status(500).json({ type: "TimeoutError", error: error.message });
-            } else if (error.message.includes('net::ERR_ABORTED')) {return res.status(500).json({ type: "ERR_ABORTED", error: error.message });
-            } else if (error.message.includes('ERR_CONNECTION_REFUSED')) {return res.status(500).json({ type: "ERR_CONNECTION_REFUSED", error: error.message });
-            } else if (error.message.includes('ERR_TOO_MANY_REDIRECTS')) {return res.status(500).json({ type: "ERR_TOO_MANY_REDIRECTS", error: error.message });
-            } else {return res.status(500).json({ type: "None", error: error.message });}
+            const errorTypes = {
+                'TimeoutError': 'Request Timeout',
+                'ERR_ABORTED': 'Request Aborted',
+                'ERR_CONNECTION_REFUSED': 'Connection Refused',
+                'ERR_TOO_MANY_REDIRECTS': 'Too Many Redirects'
+            };
+    
+            const errorType = Object.keys(errorTypes).find(type => error.message.includes(type));
+            if (errorType) {
+                return res.status(500).json({ type: errorTypes[errorType], error: error.message });
+            }
+            return res.status(500).json({ type: 'Unknown Error', error: error.message });
         } finally {
-            try {await page.close();} 
-            catch (closeError) {
-                // console.error('Ошибка при закрытии страницы:', closeError.message);
+            try {
+                await page.close();
+            } catch (closeError) {
+                console.error('Error closing page:', closeError);
             }
         }
     });
+    
 
     app.get('/api/html', async (req, res) => {
         const { url } = req.query;
@@ -301,9 +338,7 @@ puppeteer.use(StealthPlugin());
             } else {return res.status(500).json({ type: "None", error: error.message });}
         } finally {
             try {await page.close();} 
-            catch (closeError) {
-                // console.error('Ошибка при закрытии страницы:', closeError.message);
-            }
+            catch (closeError) {}
         }
     });
 
