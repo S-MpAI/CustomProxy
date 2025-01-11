@@ -52,7 +52,7 @@ puppeteer.use(StealthPlugin());
         
         // Validate URL
         if (!url) return res.status(400).send('Url parameter is required');
-        if (!isValidUrl(url)) return res.status(403).send(`Url parameter is forbidden (${url})`);
+        if (!isValidUrl(url)) return res.status(403).send(`Url parameter is forbidden.`);
         
         const queryParams = new URLSearchParams(params).toString();
         const fullUrl = queryParams ? `${url}&${queryParams}` : url;
@@ -144,7 +144,7 @@ puppeteer.use(StealthPlugin());
     app.get('/api/full_page', async (req, res) => {
         const { url, size, ...params } = req.query;
         if (!url) {return res.status(400).send('Url parameter is required');}
-        if (!isValidUrl(url))  {return res.status(403).send(`Url parameter is forbidden (${url})`);}
+        if (!isValidUrl(url))  {return res.status(403).send(`Url parameter is forbidden.`);}
 
         const queryParams = new URLSearchParams(params).toString();
         const fullUrl = queryParams ? `${url}&${queryParams}` : url;
@@ -254,7 +254,7 @@ puppeteer.use(StealthPlugin());
     app.get('/api/proxy_handler', async (req, res) => {
         const url = req.query.url;
         if (!url) {return res.status(400).json({ error: 'Url parameter is required' });}
-        if (!isValidUrl(url)) {return res.status(403).json({ error: `Url parameter is forbidden (${url})` });}
+        if (!isValidUrl(url)) {return res.status(403).json({ error: `Url parameter is forbidden.` });}
 
         try {
             const response = await axios.get(url, { responseType: 'arraybuffer' });
