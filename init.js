@@ -91,16 +91,18 @@ puppeteer.use(StealthPlugin());
     
             // Validate dimensions format
             const urlParam = req.query.url;
-            if (urlParam && urlParam.length < 1000) {
-                const simpleMatch = /^\d+\s*x\s*\d+$/.test(urlParam);
-                if (simpleMatch) {
-                    const dimensions = urlParam.match(/^(\d+)\s*x\s*(\d+)$/);
-                } else {
-                    res.status(400).send("Invalid format for dimensions.");
+            const allowedProtocols = ['https:', 'http:'];
+
+            try {
+                const url = new URL(fullUrl);
+                if (!allowedProtocols.includes(url.protocol)) {
+                    throw new Error('Invalid URL protocol');
                 }
-            } else {
-                res.status(400).send("URL character limit exceeded.");
+                const response = await axios.head(url.toString());
+            } catch (err) {
+                res.status(400).send("Invalid URL protocol or malformed URL");
             }
+
 
             
             if (dimensions) {
