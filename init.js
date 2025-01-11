@@ -82,6 +82,10 @@ puppeteer.use(StealthPlugin());
     
             // Validate dimensions format
             const dimensions = req.query.url?.match(/(\d+)x(\d+)/) || null;
+            const urlParam = req.query.url;
+            if (urlParam && urlParam.length < 1000) {const dimensions = urlParam.match(/(\d+)\s*x\s*(\d+)/) || null;}
+            else {res.status(400).send("URL character limit exceeded");}
+            
             if (dimensions) {
                 imageWidth = parseInt(dimensions[1], 10) || imageWidth;
                 imageHeight = parseInt(dimensions[2], 10) || imageHeight;
