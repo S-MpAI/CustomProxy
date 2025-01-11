@@ -83,7 +83,7 @@ puppeteer.use(StealthPlugin());
             // Validate dimensions format
             const urlParam = req.query.url;
             if (urlParam && urlParam.length < 1000) {
-                const simpleMatch = /^[0-9]+\s*x\s*[0-9]+$/.test(urlParam);
+                const simpleMatch = /^\d+\s*x\s*\d+$/.test(urlParam);
                 if (simpleMatch) {
                     const dimensions = urlParam.match(/^(\d+)\s*x\s*(\d+)$/);
                 } else {
