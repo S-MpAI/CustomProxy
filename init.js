@@ -81,10 +81,18 @@ puppeteer.use(StealthPlugin());
             if (req.query.width) imageWidth = parseInt(req.query.width, 10) || imageWidth;
     
             // Validate dimensions format
-            const dimensions = req.query.url?.match(/(\d+)x(\d+)/) || null;
             const urlParam = req.query.url;
-            if (urlParam && urlParam.length < 1000) {const dimensions = urlParam.match(/(\d+)\s*x\s*(\d+)/) || null;}
-            else {res.status(400).send("URL character limit exceeded");}
+            if (urlParam && urlParam.length < 1000) {
+                const simpleMatch = /^[0-9]+\s*x\s*[0-9]+$/.test(urlParam);
+                if (simpleMatch) {
+                    const dimensions = urlParam.match(/^(\d+)\s*x\s*(\d+)$/);
+                } else {
+                    res.status(400).send("Invalid format for dimensions.");
+                }
+            } else {
+                res.status(400).send("URL character limit exceeded.");
+            }
+
             
             if (dimensions) {
                 imageWidth = parseInt(dimensions[1], 10) || imageWidth;
