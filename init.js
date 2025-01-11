@@ -64,6 +64,15 @@ puppeteer.use(StealthPlugin());
         try {
             // Fetch headers to get content type and dimensions (if possible)
             try {
+                try {
+                    const url = new URL(fullUrl);
+                    if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+                        throw new Error('Invalid URL protocol');
+                    }
+                } catch (err) {
+                    res.status(400).send("Invalid URL protocol");
+                    // Handle the error appropriately
+                }
                 const response = await axios.head(fullUrl);
                 const contentType = response.headers['content-type'];
     
