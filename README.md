@@ -1,4 +1,10 @@
 # CustomProxy
+## Badges
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=S-MpAI_CustomProxy&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=S-MpAI_CustomProxy)
+[![Bugs](https://sonarcloud.io/api/project_badges/measure?project=S-MpAI_CustomProxy&metric=bugs)](https://sonarcloud.io/summary/new_code?id=S-MpAI_CustomProxy)
+
+[![SonarQube Cloud](https://sonarcloud.io/images/project_badges/sonarcloud-dark.svg)](https://sonarcloud.io/summary/new_code?id=S-MpAI_CustomProxy)
+## Code
 ```js
 const express = require('express');
 const axios = require('axios');
