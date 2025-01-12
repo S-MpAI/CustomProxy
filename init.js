@@ -201,8 +201,9 @@ app.disable('x-powered-by');
                     if (fileName) {
                         fileName = fileName.replace(/\s+/g, '');
                     }
-                    const invalidFileNamePattern = /[<>:"/\\|?*\u0000-\u001F]/;
-                    if (!fileName || fileName.length > 255 || invalidFileNamePattern.test(fileName)) {
+
+                    const hasInvalidCharacters = /[<>:"/\\|?*]/.test(fileName) || [...fileName].some(char => char.charCodeAt(0) < 32);
+                    if (!fileName || fileName.length > 255 || hasInvalidCharacters) {
                         throw new Error("Invalid file name detected");
                     }
 
