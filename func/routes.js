@@ -117,7 +117,12 @@ async function handleHtmlContent(page, res, fullUrl, baseUrl) {
         res.set('Content-Type', contentType);
         res.send(html);
     } catch (error) {
-        throw error;
+        console.error("Error occurred while handling HTML content:", error);
+        res.status(500).send({
+            status: 'error',
+            message: 'Failed to download the file from the URL',
+            error: error.message,
+        });
     }
 }
 
