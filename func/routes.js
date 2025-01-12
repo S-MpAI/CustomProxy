@@ -1,25 +1,16 @@
-
-// const AllFunctions = require('./functions');
-
 const express = require('express');
 const axios = require('axios');
 const path = require('path');
 const fs = require('fs'); 
 const os = require('os'); 
 const cheerio = require('cheerio');
-// const app = express();
 const ip = require('ip');
 const { URL } = require('url');
-
-// const Routes = require('./routes');
 const API_KEY = 'your-secret-api-key'; 
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 puppeteer.use(StealthPlugin());
 const { Transform } = require('stream');
-// app.use(express.json());
-
-// AllFunctions = new AllFunctions();
 const AllFunctionsClass = require('./functions');
 const allFunctions = new AllFunctionsClass();
 
@@ -290,13 +281,10 @@ function handleGenericResponse(response, contentType, res) {
 
 function handleJavaScriptResponse(response, res, req) {
     const proxyPrefix = `${req.protocol}://${req.get('host')}/api/proxy_handler?url=`;
-    // const proxyPrefix = 'http://localhost:4000/api/proxy_handler?url=';
 
     const transformStream = new Transform({
         transform(chunk, encoding, callback) {
             let modifiedChunk = chunk.toString();
-
-            // Add proxy to all fetch calls
             modifiedChunk = modifiedChunk.replace(/fetch\s*\((['"])(https?:\/\/.*?)(['"])/g, (match, quote1, originalUrl, quote2) => {
                 return `fetch(${quote1}${proxyPrefix}${encodeURIComponent(originalUrl)}${quote2}`;
             });
@@ -352,7 +340,6 @@ async function collectRequestData(req) {
     });
 }
 
-// Helper function to handle content response
 function handleContentResponse(contentType, externalApiResponse, url, req, res) {
     if (contentType.includes('text/css')) {
         const proxyUrl = `${req.protocol}://${req.get('host')}/api/proxy_handler?url=`;
@@ -394,20 +381,15 @@ function handleError(error, res, url) {
 }
 
 
-// getContentType = allFunctions.getContentType;
-
 class Routes {
     constructor(browser, rootSite) {
         this.browser = browser;
         this.rootSite = rootSite;
-        // this.AllFunctions = new AllFunctions();
-        // this.getContentType = this.AllFunctions.getContentType;
     }
 
     async screenshot(req, res) {
         const { url, width, height, ...params } = req.query;
 
-        // Validate URL
         if (!url) return res.status(400).send('Url parameter is required');
     
         let parsedUrl;
@@ -423,12 +405,10 @@ class Routes {
         const fullUrl = buildFullUrl(url, params);
         const { imageWidth, imageHeight } = await getImageDimensions(fullUrl, width, height);
     
-        // Validate dimensions
         if (!isValidDimensions(imageWidth, imageHeight)) {
             return res.status(400).send('Invalid image dimensions.');
         }
     
-        // Initialize Puppeteer for screenshot
         const page = await this.browser.newPage();
         await setUpPage(page, imageWidth, imageHeight);
     
@@ -470,7 +450,6 @@ class Routes {
         } catch (err) {
             console.error('Error:', err);
             console.error(`Stack trace: ${err.stack}`);
-            // return handleError(res, err, req.query.url);
             return handleError(err, res, req.query.url);
         } finally {
             try {
@@ -484,7 +463,6 @@ class Routes {
     async proxy_handler_get(req, res) {
         const url = req.query.url;
         const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-        // console.info(`[]Request received from IP: ${clientIp}`);
         console.log(`[Routes][proxy_handler_get] ${clientIp}`);
 
         if (!url) {
