@@ -197,10 +197,14 @@ app.disable('x-powered-by');
                 try {
                     const response = await axios({ method: 'get',url: fullUrl, responseType: 'stream', });
                     res.setHeader('Content-Type', response.headers['content-type']);
-                    let fileName = response.headers['content-disposition']?.match(/filename="([^"]+)"/)?.[1];
+                    let fileName = response.headers['content-disposition']?.match(/filename="([^"\\]*)"/)?.[1];
                     if (!fileName) {
                         fileName = fullUrl.split('/').pop().replace(/\?.*$/, ''); 
                     }
+                    if (!fileName || fileName.length > 255 || /[<>:"/\\|?*\x00-\x1F]/.test(fileName)) {
+                        throw new Error("Invalid file name detected");
+                    }
+
                     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
                     response.data.pipe(res);
                     response.data.on('end', () => {res.end();});
