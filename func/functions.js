@@ -10,14 +10,6 @@ class AllFunctions {
         }
     }
 
-    replaceFontFaceUrls = (cssContent, baseUrl, proxyUrl) => {
-            return cssContent.replace(/url\(['"]?(.*?)['"]?\)/g, (match, originalUrl) => {
-                const absoluteUrl = new URL(originalUrl, baseUrl).href; // Преобразование относительного пути в абсолютный
-                const proxiedUrl = `${proxyUrl}${encodeURIComponent(absoluteUrl)}`;
-                return `url('${proxiedUrl}')`;
-            });
-    };
-
     async streamToString(stream) {
         const chunks = [];
         return new Promise((resolve, reject) => {
