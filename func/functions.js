@@ -1,6 +1,4 @@
 class AllFunctions {
-    constructor() {
-    }
     isValidUrl(url) {
         try {
             const parsedUrl = new URL(url);
