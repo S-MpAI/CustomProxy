@@ -1,35 +1,3 @@
-# CustomProxy
-## Badges
-[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=S-MpAI_CustomProxy&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=S-MpAI_CustomProxy)
-[![Bugs](https://sonarcloud.io/api/project_badges/measure?project=S-MpAI_CustomProxy&metric=bugs)](https://sonarcloud.io/summary/new_code?id=S-MpAI_CustomProxy)
-
-[![SonarQube Cloud](https://sonarcloud.io/images/project_badges/sonarcloud-dark.svg)](https://sonarcloud.io/summary/new_code?id=S-MpAI_CustomProxy)
-## Code
-# init.js
-```js
-const { root } = require('cheerio');
-const HostHandler = require('./func/main');
-
-class Initialize {
-    constructor(port, rootSite) {
-        this.port = port;
-        this.HostHandler = new HostHandler(rootSite);
-    }
-
-    async start() {
-        await this.HostHandler.initializeBrowser();
-        await this.HostHandler.start(this.port);
-    }
-}
-
-let port = 4000;
-let rootSite = `http://localhost:${port}`;
-const init = new Initialize(port, rootSite);
-init.start();
-```
-
-# ./func/main.js
-```js
 const express = require('express');
 const axios = require('axios');
 const path = require('path');
@@ -102,4 +70,3 @@ class HostHandler {
 }
 
 module.exports = HostHandler;
-```
