@@ -12,7 +12,7 @@ const API_KEY = 'your-secret-api-key';
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 puppeteer.use(StealthPlugin());
-
+app.use(express.json());
 
 (async () => {
     const browser = await puppeteer.launch({
@@ -31,6 +31,14 @@ puppeteer.use(StealthPlugin());
         } catch {
             return false;
         }
+    };
+
+    const replaceFontFaceUrls = (cssContent, baseUrl, proxyUrl) => {
+        return cssContent.replace(/url\(['"]?(.*?)['"]?\)/g, (match, originalUrl) => {
+            const absoluteUrl = new URL(originalUrl, baseUrl).href; // Преобразование относительного пути в абсолютный
+            const proxiedUrl = `${proxyUrl}${encodeURIComponent(absoluteUrl)}`;
+            return `url('${proxiedUrl}')`;
+        });
     };
     
 
@@ -145,6 +153,8 @@ puppeteer.use(StealthPlugin());
     
 
 
+
+
     app.get('/api/full_page', async (req, res) => {
         const { url, size, ...params } = req.query;
         if (!url) {return res.status(400).send('Url parameter is required');}
@@ -165,7 +175,8 @@ puppeteer.use(StealthPlugin());
             await page.setDefaultTimeout(120000);
             const cookies = [
                 {name: 'example_cookie', value: 'cookie_value', domain: new URL(url).hostname },
-                {name: 'preferred_color_mode', value: 'dark', domain: new URL(url).hostname }
+                {name: 'preferred_color_mode', value: 'dark', domain: new URL(url).hostname},
+                {name: 'gw', value: 'seen',  domain: new URL(url).hostname}
             ];
             await page.setCookie(...cookies);
             await page.setRequestInterception(false);
@@ -179,12 +190,16 @@ puppeteer.use(StealthPlugin());
                 });
             });
             let reqHeaders = await getContentType(rootSite, fullUrl);
+            console.log(reqHeaders);
             if (reqHeaders.startsWith('video/') || reqHeaders.startsWith('application/octet-stream')) {
                 console.log('Request headers:', reqHeaders);
                 try {
                     const response = await axios({ method: 'get',url: fullUrl, responseType: 'stream', });
-                    const fileName = fullUrl.split('/').pop().replace(/\?.*$/, '');
                     res.setHeader('Content-Type', response.headers['content-type']);
+                    let fileName = response.headers['content-disposition']?.match(/filename="([^"]+)"/)?.[1];
+                    if (!fileName) {
+                        fileName = fullUrl.split('/').pop().replace(/\?.*$/, ''); 
+                    }
                     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
                     response.data.pipe(res);
                     response.data.on('end', () => {res.end();});
@@ -228,13 +243,55 @@ puppeteer.use(StealthPlugin());
                         $(element).attr('href', `/api/full_page?url=${encodeURIComponent(new URL(href, url).href)}`);
                     }
                 });
-                $('img, script, link').each((_, element) => {
+                
+                $('img, script, link, video').each((_, element) => {
                     const attr = $(element).is('link') ? 'href' : 'src';
                     const val = $(element).attr(attr);
+                
                     if (val) {
                         $(element).attr(attr, `/api/proxy_handler?url=${encodeURIComponent(new URL(val, url).href)}`);
                     }
+                
+                    // Дополнительная обработка для data-src
+                    if ($(element).is('img')) {
+                        const dataSrc = $(element).attr('data-src');
+                        if (dataSrc) {
+                            $(element).attr('data-src', `/api/proxy_handler?url=${encodeURIComponent(new URL(dataSrc, url).href)}`);
+                        }
+                    }
                 });
+                $('div').each((_, element) => {
+                    const dataLink = $(element).attr('data-link');
+                    if (dataLink) {
+                        $(element).attr('data-link', `/api/proxy_handler?url=${encodeURIComponent(new URL(dataLink, url).href)}`);
+                    }
+                });
+
+                $('form').each((_, element) => {
+                    const action = $(element).attr('action');
+                    if (action) {
+                        $(element).attr('action', `/api/proxy_handler?url=${encodeURIComponent(new URL(action, url).href)}`);
+                    }
+                });
+
+                $('section').each((_, element) => {
+                    ['file-url', 'preview-url', 'large-url'].forEach(attr => {
+                        const url = $(element).attr(`data-${attr}`);
+                        if (url) {
+                            if (attr === 'file-url') {
+                                $(element).attr('action', `/api/proxy_handler?url=${encodeURIComponent(new URL(url, url).href)}`);
+                            } else if (attr === 'preview-url') {
+                                $(element).attr('data-preview-action', `/api/preview_handler?url=${encodeURIComponent(new URL(url, url).href)}`);
+                            } else if (attr === 'large-url') {
+                                $(element).css('background-image', `url(${url})`);
+                            }
+                        }
+                    });
+                });
+                
+                
+                
+                
                 try {
                     const parsedContentType = contentType.split(';')[0];
                     if (!parsedContentType || !/^[a-z0-9-]+\/[a-z0-9-]+$/i.test(parsedContentType)) {throw new Error('Invalid Content-Type');}
@@ -243,40 +300,157 @@ puppeteer.use(StealthPlugin());
                 res.send($.html());
         }
         } catch (error) {
-            if (error.name === 'TimeoutError') {return res.status(500).json({ type: "TimeoutError", error: error.message });
-            } else if (error.message.includes('net::ERR_ABORTED')) {return res.status(500).json({ type: "ERR_ABORTED", error: error.message });
-            } else if (error.message.includes('ERR_CONNECTION_REFUSED')) {return res.status(500).json({ type: "ERR_CONNECTION_REFUSED", error: error.message });
-            } else if (error.message.includes('ERR_TOO_MANY_REDIRECTS')) {return res.status(500).json({ type: "ERR_TOO_MANY_REDIRECTS", error: error.message });
-            } else {return res.status(500).json({ type: "None", error: error.message });}
+            // console.log({ type: error.code, error: error.message, url: req.query.url });
+            if (error.code === 'ERR_BAD_REQUEST') { return res.status(404).json({ type: error.name, error: error.message })
+            } else if (error.name === 'TimeoutError') {return res.status(200).json({ type: error.name, error: error.message });
+            } else if (error.message.includes('net::ERR_ABORTED')) {return res.status(200).json({ type: error.name, error: error.message });
+            } else if (error.message.includes('ERR_CONNECTION_REFUSED')) {return res.status(200).json({ type: error.name, error: error.message });
+            } else if (error.message.includes('ERR_TOO_MANY_REDIRECTS')) {return res.status(200).json({ type: error.name, error: error.message });
+            } else {return res.status(200).json({ type: "None", error: error.message });}
         } finally {
             try {await page.close();} 
             catch (closeError) {}
         }
     });
-    
 
     app.get('/api/proxy_handler', async (req, res) => {
+        // console.log(req.socket.remoteAddress);
         const url = req.query.url;
-        if (!url) {return res.status(400).json({ error: 'Url parameter is required' });}
-        if (!isValidUrl(url)) {return res.status(403).json({ error: `Url parameter is forbidden.` });}
-
-        try {
-            const response = await axios.get(url, { responseType: 'arraybuffer' });
-            const contentType = response.headers['content-type'];
-            res.set('Content-Type', contentType);
-            res.send(response.data);
-        } catch (error) {
-            if (error.name === 'TimeoutError') {return res.status(500).json({ type: "TimeoutError", error: error.message });
-            } else if (error.message.includes('net::ERR_ABORTED')) {return res.status(500).json({ type: "ERR_ABORTED", error: error.message });
-            } else if (error.message.includes('ERR_CONNECTION_REFUSED')) {return res.status(500).json({ type: "ERR_CONNECTION_REFUSED", error: error.message });
-            } else if (error.message.includes('ERR_TOO_MANY_REDIRECTS')) {return res.status(500).json({ type: "ERR_TOO_MANY_REDIRECTS", error: error.message });
-            } else {return res.status(500).json({ type: "None", error: error.message });}
-        } finally {
-            try {await page.close();} 
-            catch (closeError) {}
+        if (!url) {
+            return res.status(400).json({ error: 'Url parameter is required' });
         }
+        if (!isValidUrl(url)) {
+            return res.status(403).json({ error: `Url parameter is forbidden.` });
+        }
+    
+        try {
+            const response = await axios({
+                method: 'get',
+                url,
+                responseType: 'stream', 
+            });
+    
+            if (response.status !== 200) {
+                return res.status(response.status).json({
+                    error: `Received status code ${response.status}`,
+                    serverResponse: response.data
+                });
+            }
+    
+            let contentType = response.headers['content-type'] || 'application/octet-stream';
+            if (contentType.includes('text/css')) {
+                const proxyUrl = `${req.protocol}://${req.get('host')}/api/proxy_handler?url=`;
+                const cssContent = await streamToString(response.data); 
+                const modifiedCss = replaceFontFaceUrls(cssContent, url, proxyUrl);
+                contentType = 'text/css';
+                res.set('Content-Type', contentType);
+                res.send(modifiedCss);
+            } 
+            else if (contentType.includes('video/mp4')) {
+                contentType = 'video/mp4'; 
+                res.set('Content-Type', contentType);
+                response.data.pipe(res); 
+            } 
+            else {
+                res.set('Content-Type', contentType);
+                response.data.pipe(res); 
+            }
+    
+        } catch (error) {
+            console.log({ type: error.code, error: error.message, url: req.query.url });
+            if (error.name === 'TimeoutError') {
+                return res.status(200).json({ type: "TimeoutError", error: error.message });
+            } 
+            else if (error.code === 'ENOTFOUND') {
+                return res.status(404).json({ type: "NotFound", error: error.message });
+            } else if (error.message.includes('net::ERR_ABORTED')) {
+                return res.status(200).json({ type: "ERR_ABORTED", error: error.message });
+            } else if (error.message.includes('ERR_CONNECTION_REFUSED')) {
+                return res.status(200).json({ type: "ERR_CONNECTION_REFUSED", error: error.message });
+            } else if (error.message.includes('ERR_TOO_MANY_REDIRECTS')) {
+                return res.status(200).json({ type: "ERR_TOO_MANY_REDIRECTS", error: error.message });
+            } else {
+                return res.status(200).json({ type: "None", error: error.message });
+            }
+        }
+    });
+
+    app.post('/api/proxy_handler', async (req, res) => {
+        const url = req.query.url;
+        let data = Buffer.alloc(0);
+        if (!url) {
+            return res.status(400).json({ error: 'Url parameter is required' });
+        }
+        if (!isValidUrl(url)) {
+            return res.status(403).json({ error: 'Url parameter is forbidden.' });
+        }
+        req.on('data', chunk => {
+            data = Buffer.concat([data, chunk]);
+        });
+    
+        req.on('end', async () => {
+            try {
+                const externalApiResponse = await axios({
+                    method: 'post',
+                    url: url,
+                    data: data,
+                    headers: {
+                    }
+                });
+        
+                if (externalApiResponse.status !== 200) {
+                    return res.status(externalApiResponse.status).json({
+                        error: `Received status code ${externalApiResponse.status}`,
+                        serverResponse: externalApiResponse.data
+                    });
+                }
+        
+                let contentType = externalApiResponse.headers['content-type'] || 'application/octet-stream';
+                console.log(`Content-Type [POST]: ${contentType}`);
+        
+                // For CSS files, handle normally
+                if (contentType.includes('text/css')) {
+                    const proxyUrl = `${req.protocol}://${req.get('host')}/api/proxy_handler?url=`;
+                    const cssContent = await streamToString(externalApiResponse.data); // Convert stream to text
+                    const modifiedCss = replaceFontFaceUrls(cssContent, url, proxyUrl);
+                    res.set('Content-Type', 'text/css');
+                    res.send(modifiedCss);
+                } 
+                else if (contentType.includes('video/mp4')) {
+                    res.set('Content-Type', 'video/mp4');
+                    externalApiResponse.data.pipe(res); 
+                } 
+                else {
+                    if (externalApiResponse.data.pipe && typeof externalApiResponse.data.pipe === 'function') {
+                        externalApiResponse.data.pipe(res); 
+                    } else {
+                        res.set('Content-Type', contentType);
+                        res.send(externalApiResponse.data);
+                    }
+                }
+            } catch (error) {
+                console.error({ type: error.code, error: error.message, url: req.query.url });
+                if (error.response) {
+                    res.status(error.response.status).json({
+                        error: error.response.data || error.message
+                    });
+                } else {
+                    res.status(500).json({ error: error.message });
+                }
+            }
+        });
         
     });
+    
+    async function streamToString(stream) {
+        const chunks = [];
+        return new Promise((resolve, reject) => {
+            stream.on('data', chunk => chunks.push(chunk));
+            stream.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+            stream.on('error', reject);
+        });
+    }
+    
 
     app.get('/api/pdf', async (req, res) => {
         const { url, size, ...params } = req.query;
@@ -345,4 +519,3 @@ puppeteer.use(StealthPlugin());
         console.log('Сервер запущен на порту 4000');
     });
 })();
-
