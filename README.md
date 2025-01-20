@@ -2,6 +2,7 @@
 ## Badges
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=S-MpAI_CustomProxy&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=S-MpAI_CustomProxy)
 [![Bugs](https://sonarcloud.io/api/project_badges/measure?project=S-MpAI_CustomProxy&metric=bugs)](https://sonarcloud.io/summary/new_code?id=S-MpAI_CustomProxy)
+[![Codacy Badge](https://app.codacy.com/project/badge/Grade/66d8d6e40cab4e72b9e44d7921be602d)](https://app.codacy.com/gh/S-MpAI/CustomProxy/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
 
 [![SonarQube Cloud](https://sonarcloud.io/images/project_badges/sonarcloud-dark.svg)](https://sonarcloud.io/summary/new_code?id=S-MpAI_CustomProxy)
 ## Code
