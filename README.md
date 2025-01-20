@@ -1,5 +1,6 @@
 # CustomProxy
 ## Badges
+[![Codacy Badge](https://api.codacy.com/project/badge/Grade/aca0e624efc648b7acc5c36f2e4d5409)](https://app.codacy.com/gh/S-MpAI/CustomProxy?utm_source=github.com&utm_medium=referral&utm_content=S-MpAI/CustomProxy&utm_campaign=Badge_Grade)
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=S-MpAI_CustomProxy&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=S-MpAI_CustomProxy)
 [![Bugs](https://sonarcloud.io/api/project_badges/measure?project=S-MpAI_CustomProxy&metric=bugs)](https://sonarcloud.io/summary/new_code?id=S-MpAI_CustomProxy)
 
